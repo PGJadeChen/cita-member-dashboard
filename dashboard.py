@@ -30,7 +30,6 @@ st.markdown(
     }
     .card {
         background-color: white;
-        border-radius: 10px;
         padding: 20px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
@@ -47,25 +46,30 @@ st.markdown(
         font-weight: bold;
         color: #003366;
     }
-    /* 新增：确保图表容器内的所有内容都被包裹 */
-    .card-content {
-        overflow: hidden;
-    }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 
-def create_card(title, content):
-    card = st.container()
-    with card:
-        st.markdown(
-            f'<div class="card"><h2>{title}</h2><div class="card-content">',
-            unsafe_allow_html=True,
-        )
-        content()
-        st.markdown("</div></div>", unsafe_allow_html=True)
+# 定义统一的图表样式
+def apply_common_style(fig, title):
+    fig.update_layout(
+        title={
+            "text": title,
+            "y": 0.95,
+            "x": 0.5,
+            "xanchor": "center",
+            "yanchor": "top",
+            "font": dict(family=chinese_font, size=20, color="#003366"),
+        },
+        font=dict(family=chinese_font),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=40, r=40, t=50, b=40),
+        legend=dict(orientation="v", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
 
 
 nz_regions_cities = {
@@ -144,15 +148,22 @@ def deduplicate_regions(df, region_column):
     return result
 
 
-# 加载数据
+# 加载新西兰的 geojson 文件
 @st.cache_data
-def load_data():
+def load_geojson():
+    with open("./gadm41_NZL_2.json") as f:
+        nz_geojson = json.load(f)
+    return nz_geojson
+
+
+# 加载和处理数据
+@st.cache_data
+def load_and_preprocess_data():
     members = pd.read_csv("./data/members.csv")
     members = members[
         members["Member ID"].notna()
         & members["Member ID"].str.startswith("CITANZ-", na=False)
     ]
-    members = deduplicate_regions(members, "Region")
 
     payments = pd.read_csv("./data/payments.csv")
 
@@ -175,37 +186,6 @@ def load_data():
     )
     payments["Amount"] = (
         payments["Amount"].replace(r"[$,]", "", regex=True).astype(float)
-    )
-
-    return members, payments
-
-
-# 加载新西兰的 geojson 文件
-@st.cache_data
-def load_geojson():
-    with open("./gadm41_NZL_2.json") as f:
-        nz_geojson = json.load(f)
-    return nz_geojson
-
-
-# 处理数据
-def preprocess_data(members, payments):
-    # 处理日期格式
-    members["Expiry date"] = pd.to_datetime(
-        members["Expiry date"], format="%d/%m/%Y", errors="coerce"
-    )
-    members["Last Payment Date"] = pd.to_datetime(
-        members["Last Payment Date"], format="%d/%m/%Y %H:%M", errors="coerce"
-    )
-    members["Date Signed up"] = pd.to_datetime(
-        members["Date Signed up"], format="%b %d, %Y, %I:%M %p", errors="coerce"
-    )
-
-    payments["Paid at"] = pd.to_datetime(
-        payments["Paid at"], format="%b %d, %Y, %I:%M %p", errors="coerce"
-    )
-    payments["Amount"] = (
-        payments["Amount"].replace("[\$,]", "", regex=True).astype(float)
     )
 
     return members, payments
@@ -253,8 +233,7 @@ def plot_membership_status(members):
         color_discrete_sequence=[COLOR_SCHEME["primary"], COLOR_SCHEME["secondary"]],
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(title_font_size=20, title_x=0.5)
-    return fig
+    return apply_common_style(fig, "Membership Status")
 
 
 # 收入趋势图
@@ -265,13 +244,7 @@ def plot_income_trend(payments):
     monthly_income = payments.groupby("Month")["Amount"].sum().reset_index()
     fig = px.line(monthly_income, x="Month", y="Amount", title="Monthly Charge Trend")
     fig.update_xaxes(nticks=20)
-    fig.update_layout(
-        font=dict(family=chinese_font),
-        title_font=dict(family=chinese_font),
-        title_font_size=20,
-        title_x=0.5,
-    )
-    return fig
+    return apply_common_style(fig, "Monthly Charge Trend")
 
 
 def process_and_visualize_regions(df, region_column):
@@ -321,7 +294,7 @@ def process_and_visualize_regions(df, region_column):
         color_discrete_sequence=px.colors.qualitative.Set3,
     )
     fig1.update_traces(textposition="inside", textinfo="percent+label")
-    fig1.update_layout(title_font_size=20, title_x=0.5)
+    fig1 = apply_common_style(fig1, "Main Regions Distribution")
 
     # 创建其他地区的条形图
     fig2 = px.bar(
@@ -331,8 +304,8 @@ def process_and_visualize_regions(df, region_column):
         title="Other Regions Distribution",
         color_discrete_sequence=[COLOR_SCHEME["accent"]],
     )
-    fig2.update_layout(xaxis_tickangle=-45, title_font_size=20, title_x=0.5)
-
+    fig2 = apply_common_style(fig2, "Other Regions Distribution")
+    fig2.update_layout(xaxis_tickangle=-45)
     return fig1, fig2
 
 
@@ -374,15 +347,8 @@ def plot_member_activity_heatmap(members):
         aspect="auto",
     )
 
-    fig.update_layout(
-        title="Member Activity Heatmap (Days vs Hours)",
-        font=dict(family=chinese_font),
-        title_font=dict(family=chinese_font),
-        title_font_size=20,
-        height=500,
-        title_x=0.5,
-    )
-
+    fig = apply_common_style(fig, "Member Activity Heatmap (Days vs Hours)")
+    fig.update_layout(height=500)
     return fig
 
 
@@ -400,15 +366,9 @@ def plot_renewal_funnel(members):
 
     fig.update_traces(textposition="inside", textinfo="percent+label")
 
-    fig.update_layout(
-        font=dict(family=chinese_font),
-        title_font=dict(family=chinese_font),
-        annotations=[
-            dict(text="Renewal", x=0.5, y=0.5, font_size=20, showarrow=False)
-        ],  # 环形图中心的文本
-    )
-
-    return fig  # 返回图表对象而不是直接显示它
+    fig = apply_common_style(fig, "Membership Status (Renewed vs Not Renewed)")
+    fig.add_annotation(text="Renewal", x=0.5, y=0.5, font_size=20, showarrow=False)
+    return fig
 
 
 # 每月新会员注册柱状图
@@ -420,13 +380,8 @@ def plot_new_members(members):
     fig = px.bar(
         new_members, x="Sign Up Month", y="Member ID", title="New Members per Month"
     )
+    fig = apply_common_style(fig, "New Members per Month")
     fig.update_xaxes(nticks=20)
-    fig.update_layout(
-        font=dict(family=chinese_font),
-        title_font=dict(family=chinese_font),
-        title_font_size=20,
-        title_x=0.5,
-    )
     return fig
 
 
@@ -435,24 +390,13 @@ def plot_payment_amount_distribution(payments):
     amount_dist = payments["Amount"].value_counts().reset_index()
     amount_dist.columns = ["Amount", "Count"]
 
-    fig = px.pie(
-        values=amount_dist["Count"],
-        names=amount_dist["Amount"],
-        title="Membership Type",
-    )
+    fig = px.pie(values=amount_dist["Count"], names=amount_dist["Amount"])
     fig.update_traces(textposition="inside", textinfo="percent+label")
-    fig.update_layout(
-        font=dict(family=chinese_font),
-        title_font=dict(family=chinese_font),
-        title_font_size=20,
-        title_x=0.5,
-    )
-    return fig
+    return apply_common_style(fig, "Membership Type")
 
 
 # 新西兰城市分布气泡地图
 def plot_nz_city_map(members):
-    # members["Region"] = members["Region"].fillna("Unknown")
     members["City"] = members["City"].fillna("Unknown")
 
     # 创建一个地区和城市名称映射字典
@@ -472,12 +416,7 @@ def plot_nz_city_map(members):
                 return name
         return "Unknown"
 
-    # members["Matched_Region"] = members["Region"].apply(match_location)
     members["Matched_City"] = members["City"].apply(match_location)
-
-    # region_counts = members[members["Matched_Region"] != "Unknown"][
-    #     "Matched_Region"
-    # ].value_counts()
     city_counts = members[members["Matched_City"] != "Unknown"][
         "Matched_City"
     ].value_counts()
@@ -487,21 +426,6 @@ def plot_nz_city_map(members):
         return np.clip(np.log(count) * 5, min_size, max_size)
 
     fig_map = go.Figure()
-
-    # 添加 Region 数据
-    # fig_map.add_trace(
-    #     go.Scattermapbox(
-    #         lat=[nz_regions_cities[region][0] for region in region_counts.index],
-    #         lon=[nz_regions_cities[region][1] for region in region_counts.index],
-    #         mode="markers",
-    #         marker=go.scattermapbox.Marker(
-    #             size=scale_bubble_size(region_counts.values), color="blue", opacity=0.6
-    #         ),
-    #         text=[f"{region}: {count}" for region, count in region_counts.items()],
-    #         hoverinfo="text",
-    #         name="Regions",
-    #     )
-    # )
 
     # 添加 City 数据
     fig_map.add_trace(
@@ -518,14 +442,13 @@ def plot_nz_city_map(members):
         )
     )
 
+    fig_map = apply_common_style(fig_map, "New Zealand City Distribution")
     fig_map.update_layout(
         mapbox_style="carto-positron",
-        mapbox=dict(center=dict(lat=-41.0, lon=174.0), zoom=4.2),
+        mapbox=dict(center=dict(lat=-41.0, lon=174.0), zoom=4),
         showlegend=False,
         height=500,
-        margin={"r": 0, "t": 0, "l": 0, "b": 0},
     )
-
     return fig_map
 
 
@@ -535,15 +458,14 @@ def dashboard_layout():
         unsafe_allow_html=True,
     )
 
-    members, payments = load_data()
-    members, payments = preprocess_data(members, payments)
+    members, payments = load_and_preprocess_data()
 
-    # 计算并展示关键指标
+    # 计算关键指标
     total_members, active_members, new_members_this_month = calculate_key_metrics(
         members
     )
 
-    # 关键指标卡片居中展示
+    # 关键指标
     col1, col2, col3 = st.columns(3)
     with col1:
         display_metric_card("Total Members", total_members)
@@ -553,63 +475,43 @@ def dashboard_layout():
         display_metric_card("New Members This Month", new_members_this_month)
 
     # 会员分布
-    def membership_distribution_content():
-        fig1, fig2 = process_and_visualize_regions(members, "Region")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(fig1, use_container_width=True)
-        with col2:
-            st.plotly_chart(fig2, use_container_width=True)
-
-    create_card("Membership Distribution", membership_distribution_content)
+    fig1, fig2 = process_and_visualize_regions(members, "Region")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.plotly_chart(fig1, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig2, use_container_width=True)
 
     # 会员状态
-    def membership_status_content():
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.plotly_chart(plot_membership_status(members), use_container_width=True)
-        with col2:
-            st.plotly_chart(
-                plot_payment_amount_distribution(payments), use_container_width=True
-            )
-        with col3:
-            st.plotly_chart(plot_renewal_funnel(members), use_container_width=True)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.plotly_chart(plot_membership_status(members), use_container_width=True)
+    with col2:
+        st.plotly_chart(
+            plot_payment_amount_distribution(payments), use_container_width=True
+        )
+    with col3:
+        st.plotly_chart(plot_renewal_funnel(members), use_container_width=True)
 
-    create_card("Membership Status", membership_status_content)
-
-    # 财务分析
-    def financial_analysis_content():
-        income_trend_fig = plot_income_trend(payments)
-        st.plotly_chart(income_trend_fig, use_container_width=True)
-
-    create_card("Financial Analysis", financial_analysis_content)
+    # 会员充值分析
+    income_trend_fig = plot_income_trend(payments)
+    st.plotly_chart(income_trend_fig, use_container_width=True)
 
     # 会员活动和地理分布
-    def activity_and_distribution_content():
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.markdown("<h3>Geographical Distribution</h3>", unsafe_allow_html=True)
-            nz_map_fig = plot_nz_city_map(members)
-            if nz_map_fig is not None:
-                st.plotly_chart(nz_map_fig, use_container_width=True)
-            else:
-                st.write("No data available for New Zealand map.")
-        with col2:
-            st.markdown("<h3>Member Activity Heatmap</h3>", unsafe_allow_html=True)
-            activity_heatmap_fig = plot_member_activity_heatmap(members)
-            st.plotly_chart(activity_heatmap_fig, use_container_width=True)
-
-    create_card(
-        "Member Activity and Geographical Distribution",
-        activity_and_distribution_content,
-    )
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        nz_map_fig = plot_nz_city_map(members)
+        if nz_map_fig is not None:
+            st.plotly_chart(nz_map_fig, use_container_width=True)
+        else:
+            st.write("No data available for New Zealand map.")
+    with col2:
+        activity_heatmap_fig = plot_member_activity_heatmap(members)
+        st.plotly_chart(activity_heatmap_fig, use_container_width=True)
 
     # 新会员注册趋势
-    def new_member_trend_content():
-        new_members_fig = plot_new_members(members)
-        st.plotly_chart(new_members_fig, use_container_width=True)
-
-    create_card("New Member Registration Trend", new_member_trend_content)
+    new_members_fig = plot_new_members(members)
+    st.plotly_chart(new_members_fig, use_container_width=True)
 
 
 # 运行 Dashboard
