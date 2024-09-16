@@ -3,6 +3,7 @@ streamlit==1.25.0
 plotly==5.17.0
 seaborn==0.12.2
 numpy>=1.26.0
+pillow>=9.5.0
 setuptools>=58.0.0
 wheel
 pypinyin
