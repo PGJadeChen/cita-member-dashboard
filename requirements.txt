@@ -28,7 +28,6 @@ executing==2.0.1
 fastjsonschema==2.20.0
 fonttools==4.53.1
 fqdn==1.5.1
-GDAL==3.9.2
 gpg==1.23.2
 graphviz==0.20.3
 h11==0.14.0
