@@ -14,40 +14,41 @@ st.set_page_config(page_title="CITANZ Membership Dashboard", layout="wide")
 
 # 定义颜色方案
 COLOR_SCHEME = {
-    "primary": "#003366",
-    "secondary": "#FF9900",
-    "accent": "#66CCCC",
-    "background": "#F0F2F6",
-    "text": "#333333",
+    "primary": "#3366cc",  # A soft blue as the primary color
+    "secondary": "#dc3912",  # A muted red for contrast and highlights
+    "accent": "#ff9900",  # A soft orange for accents
+    "background": "#f9f9f9",  # A light grey for background
+    "text": "#333333",  # A dark grey for text
+    "neutral": "#909090",  # A medium grey for less important elements
 }
 
 # 自定义CSS
 st.markdown(
-    """
-<style>
-    .stApp {
-        background-color: #F0F2F6;
-    }
-    .card {
+    f"""
+    <style>
+    .stApp {{
+        background-color: {COLOR_SCHEME["background"]};
+    }}
+    .card {{
         background-color: white;
         padding: 20px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
-    }
-    .card h2 {
-        color: #003366;
+    }}
+    .card h2 {{
+        color: {COLOR_SCHEME["primary"]};
         margin-top: 0;
         margin-bottom: 20px;
         padding-bottom: 10px;
         border-bottom: 1px solid #e0e0e0;
-    }
-    .metric-value {
+    }}
+    .metric-value {{
         font-size: 2.5rem;
         font-weight: bold;
-        color: #003366;
-    }
-</style>
-""",
+        color: {COLOR_SCHEME["primary"]};
+    }}
+    </style>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -61,14 +62,16 @@ def apply_common_style(fig, title):
             "x": 0.5,
             "xanchor": "center",
             "yanchor": "top",
-            "font": dict(family=chinese_font, size=20, color="#003366"),
+            "font": dict(family=chinese_font, size=20, color=COLOR_SCHEME["primary"]),
         },
-        font=dict(family=chinese_font),
-        plot_bgcolor="white",
-        paper_bgcolor="white",
+        font=dict(family=chinese_font, color=COLOR_SCHEME["text"]),
+        plot_bgcolor=COLOR_SCHEME["background"],
+        paper_bgcolor=COLOR_SCHEME["background"],
         margin=dict(l=40, r=40, t=50, b=40),
-        legend=dict(orientation="v", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1),
     )
+    fig.update_xaxes(gridcolor=COLOR_SCHEME["neutral"], gridwidth=0.5)
+    fig.update_yaxes(gridcolor=COLOR_SCHEME["neutral"], gridwidth=0.5)
     return fig
 
 
@@ -224,7 +227,6 @@ def plot_membership_status(members):
         .value_counts()
     )
 
-    # 创建环形图
     fig = px.pie(
         values=expiry_status.values,
         names=expiry_status.index,
@@ -238,12 +240,20 @@ def plot_membership_status(members):
 
 # 收入趋势图
 def plot_income_trend(payments):
-    payments["Month"] = (
-        payments["Paid at"].dt.to_period("M").astype(str)
-    )  # 将 Period 转换为字符串
+    payments["Month"] = payments["Paid at"].dt.to_period("M").astype(str)
     monthly_income = payments.groupby("Month")["Amount"].sum().reset_index()
-    fig = px.line(monthly_income, x="Month", y="Amount", title="Monthly Charge Trend")
-    fig.update_xaxes(nticks=20)
+    fig = px.line(
+        monthly_income,
+        x="Month",
+        y="Amount",
+        title="Monthly Charge Trend",
+        line_shape="spline",
+        render_mode="svg",
+    )
+    fig.update_traces(line_color=COLOR_SCHEME["primary"])
+    fig.update_xaxes(
+        dtick="M1", tickformat="%b %Y", tickangle=-45, ticklabelmode="period"
+    )
     return apply_common_style(fig, "Monthly Charge Trend")
 
 
@@ -285,24 +295,28 @@ def process_and_visualize_regions(df, region_column):
     main_region_data = grouped[grouped[region_column].isin(main_regions)]
     other_region_data = grouped[~grouped[region_column].isin(main_regions)]
 
-    # 创建主要地区的饼图
+    # Create pie chart for main regions
     fig1 = px.pie(
         main_region_data,
         values="Member ID",
         names=region_column,
         title="Main Regions Distribution",
-        color_discrete_sequence=px.colors.qualitative.Set3,
+        color_discrete_sequence=[
+            COLOR_SCHEME["primary"],
+            COLOR_SCHEME["secondary"],
+            COLOR_SCHEME["accent"],
+        ],
     )
     fig1.update_traces(textposition="inside", textinfo="percent+label")
     fig1 = apply_common_style(fig1, "Main Regions Distribution")
 
-    # 创建其他地区的条形图
+    # Create bar chart for other regions
     fig2 = px.bar(
         other_region_data,
         x=region_column,
         y="Member ID",
         title="Other Regions Distribution",
-        color_discrete_sequence=[COLOR_SCHEME["accent"]],
+        color_discrete_sequence=[COLOR_SCHEME["primary"]],
     )
     fig2 = apply_common_style(fig2, "Other Regions Distribution")
     fig2.update_layout(xaxis_tickangle=-45)
@@ -311,29 +325,43 @@ def process_and_visualize_regions(df, region_column):
 
 # 使用 Plotly 绘制会员活跃度热力图
 def plot_member_activity_heatmap(members):
-    # 提取星期和小时
     members["Last logged in date"] = pd.to_datetime(
         members["Last logged in"], format="%b %d, %Y, %I:%M %p", errors="coerce"
     )
-    members["DayOfWeek"] = members[
-        "Last logged in date"
-    ].dt.dayofweek  # 星期几 (0: Monday, 6: Sunday)
-    members["Hour"] = members["Last logged in date"].dt.hour  # 登录的小时
+    members["DayOfWeek"] = members["Last logged in date"].dt.dayofweek
+    members["Hour"] = members["Last logged in date"].dt.hour
+    members["Date"] = members["Last logged in date"].dt.date
 
-    # 统计每个时间段的活跃度
-    activity_heatmap = members.pivot_table(
-        index="DayOfWeek",
-        columns="Hour",
-        values="Member ID",
-        aggfunc="count",
-        fill_value=0,
+    # Create a complete index for all day and hour combinations
+    all_days = range(7)
+    all_hours = list(range(24))
+    index = pd.MultiIndex.from_product(
+        [all_days, all_hours], names=["DayOfWeek", "Hour"]
     )
 
-    # 使用 Plotly 绘制热力图
+    # Count the occurrences and reindex to include all combinations
+    activity_counts = (
+        members.groupby(["DayOfWeek", "Hour"]).size().reindex(index, fill_value=0)
+    )
+
+    # Reshape to create the heatmap data
+    activity_heatmap = activity_counts.unstack(level="Hour")
+
+    # Create hover text
+    hover_text = [
+        [
+            f"Day: {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day]}<br>"
+            f"Hour: {hour:02d}:00<br>"
+            f"Count: {activity_heatmap.iloc[day, hour]}"
+            for hour in all_hours
+        ]
+        for day in all_days
+    ]
+
     fig = px.imshow(
         activity_heatmap,
         labels=dict(x="Hour of Day", y="Day of Week", color="Login Count"),
-        x=activity_heatmap.columns,
+        x=all_hours,
         y=[
             "Monday",
             "Tuesday",
@@ -343,12 +371,23 @@ def plot_member_activity_heatmap(members):
             "Saturday",
             "Sunday",
         ],
-        color_continuous_scale="YlGnBu",
+        color_continuous_scale=[
+            [0, COLOR_SCHEME["background"]],
+            [1, COLOR_SCHEME["primary"]],
+        ],
         aspect="auto",
     )
 
+    fig.update_traces(hovertemplate="%{text}", text=hover_text)
+
     fig = apply_common_style(fig, "Member Activity Heatmap (Days vs Hours)")
     fig.update_layout(height=500)
+
+    # Update x-axis to show 24-hour format
+    fig.update_xaxes(
+        tickvals=list(range(24)), ticktext=[f"{h:02d}:00" for h in range(24)]
+    )
+
     return fig
 
 
@@ -373,16 +412,15 @@ def plot_renewal_funnel(members):
 
 # 每月新会员注册柱状图
 def plot_new_members(members):
-    members["Sign Up Month"] = (
-        members["Date Signed up"].dt.to_period("M").astype(str)
-    )  # 转换为字符串
+    members["Sign Up Month"] = members["Date Signed up"].dt.to_period("M").astype(str)
     new_members = members.groupby("Sign Up Month")["Member ID"].count().reset_index()
     fig = px.bar(
         new_members, x="Sign Up Month", y="Member ID", title="New Members per Month"
     )
-    fig = apply_common_style(fig, "New Members per Month")
-    fig.update_xaxes(nticks=20)
-    return fig
+    fig.update_xaxes(
+        dtick="M1", tickformat="%b %Y", tickangle=-45, ticklabelmode="period"
+    )
+    return apply_common_style(fig, "New Members per Month")
 
 
 # 会员缴费金额分布饼图
@@ -434,7 +472,9 @@ def plot_nz_city_map(members):
             lon=[nz_regions_cities[city][1] for city in city_counts.index],
             mode="markers",
             marker=go.scattermapbox.Marker(
-                size=scale_bubble_size(city_counts.values), color="red", opacity=0.5
+                size=scale_bubble_size(city_counts.values),
+                color=COLOR_SCHEME["primary"],  # Changed to primary color (blue)
+                opacity=0.7,
             ),
             text=[f"{city}: {count}" for city, count in city_counts.items()],
             hoverinfo="text",
