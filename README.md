@@ -100,7 +100,7 @@ By default, the Flask backend will run on `http://127.0.0.1:5000`.
    npm run dev
    ```
 
-By default, the frontend will be available at `http://127.0.0.1:3000`.
+By default, the frontend will be available at `http://127.0.0.1:5173`.
 
 ### Streamlit App
 
