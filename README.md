@@ -49,9 +49,8 @@ CITA/
 
 Ensure that you have the following installed on your machine:
 
--   Python 3.6+
--   Node.js (v14+ recommended)
--   npm (or yarn)
+-   Python 3
+-   Node.js 
 
 ## Setup
 
