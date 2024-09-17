@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 blinker==1.8.2
 click==8.1.7
 Flask==3.0.3
@@ -14,8 +13,3 @@ pytz==2024.2
 six==1.16.0
 tzdata==2024.1
 Werkzeug==3.0.4
-=======
-Flask==2.1.1
-Flask-CORS==3.0.10
-pandas==1.4.2
->>>>>>> db905f6982cf352d2f51680872f2101bfeecfce7
